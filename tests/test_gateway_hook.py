@@ -2,13 +2,12 @@
 Тестовые кейсы для хука, взаимодействующего с провайдером. Здесь не тестируется конкретная реализация, только общий
 интерфейс
 """
-from aiohttp import web
 from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
 from aiohttp.web_app import Application
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
-import storage
-from oneweb_helpdesk_chat.gateways import Repository, Gateway, repository
+from oneweb_helpdesk_chat import storage
+from oneweb_helpdesk_chat.gateways import repository
 from tests.utils import AsyncMock
 
 

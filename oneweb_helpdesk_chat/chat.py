@@ -1,13 +1,12 @@
 """
 Специфичные для чата компоненты
 """
-import asyncio
 from asyncio import Queue
 
 from aiohttp import web
 
 from oneweb_helpdesk_chat import gateways
-from storage import Message, Dialog, User
+from oneweb_helpdesk_chat.storage import Message, Dialog, User
 import json
 
 DEFAULT_DT_FORMAT = "%Y-%m-%d %H:%M:%S"

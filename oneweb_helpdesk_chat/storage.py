@@ -2,6 +2,7 @@
 Хранилище бизнес-объектов(работа с базой данных).
 """
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 
 import sqlalchemy
@@ -14,18 +15,21 @@ _engine = None
 
 AppSession = sessionmaker()
 
+executor = ThreadPoolExecutor(10)
+
 
 def engine():
     global _engine
     if _engine is None:
-        _engine = sqlalchemy.create_engine('sqlite:///:memory:', echo=True)
+        _engine = sqlalchemy.create_engine(
+            'postgresql://postgres:simplepass@localhost/oneweb_helpdesk_chat_test',
+            echo=True, pool_size=10, max_overflow=0
+        )
     return _engine
 
 
 def session() -> Session:
-    if not _engine:
-        AppSession.configure(bind=engine())
-    return AppSession()
+    return AppSession(bind=engine())
 
 
 async def fetch_results(query: Query, fetch_method="all", *args):
@@ -37,8 +41,8 @@ async def fetch_results(query: Query, fetch_method="all", *args):
     :param args: Аргументы для метода fetch_method
     :return:
     """
-    return asyncio.get_event_loop().run_in_executor(
-        None,
+    return await asyncio.get_event_loop().run_in_executor(
+        executor,
         getattr(query, fetch_method),
         *args
     )
@@ -59,6 +63,10 @@ class Customer(Base):
     """
     Клиент. Тот, кто обращается к нам
     :type dialogs: list(Dialog)
+    :ivar str phone_number: Номер телефона клиента, по нему мы связываем нескольких клиентов, пришедших из разных
+      каналов.
+      todo: некоторые каналы могут не иметь номер телефона, тогда нам нужно еще добавить какие-то другие
+        алиасы, причем по нескольку, но это довольно сложная задача
     """
     __tablename__ = "customers"
 
@@ -92,7 +100,7 @@ class Dialog(Base):
 
     customer = relationship("Customer", back_populates="dialogs")
     assigned_user = relationship("User", back_populates="dialogs")
-    messages = relationship("Message", back_populates="dialog")
+    messages = relationship("Message", back_populates="dialog") # type: list
 
 
 class Message(Base):
@@ -107,11 +115,12 @@ class Message(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
 
     user_id = Column(Integer, nullable=True)
-    # destination - то же самое, что и source только для получателя сообщения
-    destination = Column(Integer, nullable=False)
-    channel = Column(sqlalchemy.Enum, sqlalchemy.Enum(Channels), nullable=False)
+    channel = Column(
+        sqlalchemy.Enum(Channels, name='channels'),
+        nullable=False
+    )
     # метаданные сообщения, пришедшие от канала
-    channel_metadata = Column(sqlalchemy.JSON, nullable=True)
+    # channel_metadata = Column(sqlalchemy.JSON, nullable=True)
     # идентификатор связанного диалога
     dialog_id = Column(Integer, ForeignKey("dialogs.id"), nullable=True)
 

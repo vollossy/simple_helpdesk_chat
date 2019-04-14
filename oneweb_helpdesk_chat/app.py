@@ -1,8 +1,7 @@
 from aiohttp import web
 from aiohttp_session import get_session, setup, SimpleCookieStorage
 import asyncio
-import storage
-from oneweb_helpdesk_chat import events, gateways
+from oneweb_helpdesk_chat import events, gateways, storage
 from oneweb_helpdesk_chat.chat import ChatHandler
 
 app = web.Application()

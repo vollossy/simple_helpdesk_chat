@@ -8,19 +8,15 @@ from enum import Enum
 import sqlalchemy
 from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, func
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker, Query
-from sqlalchemy.orm.session import Session
+from sqlalchemy.orm import relationship, sessionmaker, Query, scoped_session
 
 _engine = None
-
-AppSession = sessionmaker()
-
-executor = ThreadPoolExecutor(10)
 
 
 def engine():
     global _engine
     if _engine is None:
+        # todo: сделать вариацию для получения именно тестовой бд
         _engine = sqlalchemy.create_engine(
             'postgresql://postgres:simplepass@localhost/oneweb_helpdesk_chat_test',
             echo=True, pool_size=10, max_overflow=0
@@ -28,8 +24,10 @@ def engine():
     return _engine
 
 
-def session() -> Session:
-    return AppSession(bind=engine())
+AppSession = sessionmaker()
+ScopedAppSession = scoped_session(sessionmaker())
+
+executor = ThreadPoolExecutor(10)
 
 
 async def fetch_results(query: Query, fetch_method="all", *args):

@@ -18,13 +18,16 @@ class GatewayHookTestCase(AioHTTPTestCase):
 
     async def get_application(self) -> Application:
         from oneweb_helpdesk_chat import app
-        return app.app
+        return await app.make_app()
 
     def setUp(self) -> None:
         super().setUp()
+        self.dialog = storage.Dialog(id=1)
 
         self.gateway_stub = MagicMock()
-        self.gateway_stub.handle_message = AsyncMock(return_value=storage.Message())
+        self.gateway_stub.handle_message = AsyncMock(
+            return_value=storage.Message(dialog=self.dialog)
+        )
 
         repository.register_gateway("example", self.gateway_stub)
 
@@ -35,9 +38,11 @@ class GatewayHookTestCase(AioHTTPTestCase):
     @unittest_run_loop
     async def test_simple(self):
         """
-        Простейший тестовый кейс. Хук должен вызывать требуемый gateway из репозитория
+        Простейший тестовый кейс. Хук должен вызывать требуемый gateway из
+        репозитория с необходимыми параметрами
         """
-        # асинхронная заглушка для обработки сообщений(нужна для взаимодействия с asyncio)
-
-        await self.client.request("GET", self.app.router["gateway-hook"].url_for(gateway_alias="example"))
+        await self.client.request(
+            "GET",
+            self.app.router["gateway-hook"].url_for(gateway_alias="example")
+        )
         self.gateway_stub.handle_message.assert_called()

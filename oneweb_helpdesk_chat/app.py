@@ -3,10 +3,11 @@ from aiohttp_session import get_session, setup, SimpleCookieStorage
 import asyncio
 from oneweb_helpdesk_chat import events, gateways, storage
 from oneweb_helpdesk_chat.chat import ChatHandler
+from . import events as app_events
 
-app = web.Application()
+
 routes = web.RouteTableDef()
-setup(app, SimpleCookieStorage())
+
 
 # маппинг очередей сообщений для отдельных диалогов. В качестве ключей исполь
 # зуется идентификатор диалога в нашей бд, в качестве значений - очередь
@@ -22,7 +23,7 @@ async def gateway_hook(request: web.Request):
     Хук для сообщения от im-сервиса. Сообщение преобразуется в наш внутренний
     формат и привязывается к имеющемуся диалогу, если диалога нет, то он будет
     создан. Если в диалоге не указан ответственный, то при каждом новом
-    сообщении будет отправлено уведомление о событии в
+    сообщении будет отправлено уведомление о событии в шину событий
     :param request: Запрос
     :return:
     """
@@ -31,17 +32,6 @@ async def gateway_hook(request: web.Request):
     )
     # асинхронный вызов, т.к. обработка может быть довольно длительной
     message = await gateway.handle_message(request)
-    if not message.dialog_id:
-        new_dialog = storage.Dialog(
-            customer_id=message.sender
-        )
-        await asyncio.get_event_loop().run_in_executor(
-            None, storage.session().add(new_dialog)
-        )
-        message.dialog_id = new_dialog.id
-        await asyncio.get_event_loop().run_in_executor(
-            None, storage.session().commit()
-        )
 
     if message.dialog_id not in dialogs_queues:
         dialogs_queues[message.dialog_id] = asyncio.Queue()
@@ -49,15 +39,15 @@ async def gateway_hook(request: web.Request):
     await dialogs_queues[message.dialog_id].put(message)
 
     if not message.dialog.assigned_user:
-        await events.events_queue.put(events.Event(
-            events.EventType.NEW_UNASSIGNED_DIALOG_MESSAGE,
+        await app_events.events_queue.put(app_events.Event(
+            app_events.EventType.NEW_UNASSIGNED_DIALOG_MESSAGE,
             message.dialog.id
         ))
 
     return web.Response()
 
 
-@routes.route("POST", "/login/")
+@routes.route("POST", "/login/", name="login")
 async def login(request: web.Request):
     """
     Производит логин пользователя и сохраняет его идентификатор в сессии, если
@@ -66,14 +56,17 @@ async def login(request: web.Request):
     :return:
     """
     post_data = await request.post()
-    user = await asyncio.get_event_loop().run_in_executor(
-        None,
-        storage.session().query(storage.User).filter,
-        storage.User.name == post_data["login"],
-        storage.User.password == post_data["password"]
+    user = await storage.fetch_results(
+        storage.ScopedAppSession().query(storage.User).filter(
+            storage.User.login == post_data["login"]
+        ),
+        'first'
     )
-    if not user:
-        return web.Response(status=400)
+    password_valid = storage.validate_password(
+        user.password, post_data['password']
+    )
+    if not user or not password_valid:
+        raise web.HTTPUnauthorized()
     sess = await get_session(request)
     sess["user_id"] = user.id
     return web.Response()
@@ -131,4 +124,9 @@ async def chat(request: web.Request):
 
     return ws
 
-app.add_routes(routes)
+
+async def make_app():
+    app = web.Application()
+    setup(app, SimpleCookieStorage())
+    app.add_routes(routes)
+    return app

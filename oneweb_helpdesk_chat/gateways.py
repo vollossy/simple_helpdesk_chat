@@ -127,7 +127,9 @@ class Repository:
         :return:
         """
         if string.whitespace in alias:
-            raise ValueError("Gateway alias can't contain any whitespace characters")
+            raise ValueError(
+                "Gateway alias can't contain any whitespace characters"
+            )
         self._repository[alias] = gateway
 
     def unregister_gateway(self, alias: str):

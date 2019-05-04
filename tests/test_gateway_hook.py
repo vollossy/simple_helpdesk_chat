@@ -8,10 +8,10 @@ from unittest.mock import MagicMock
 
 from oneweb_helpdesk_chat import storage
 from oneweb_helpdesk_chat.gateways import repository
-from tests.utils import AsyncMock
+from tests.utils import AsyncMock, BaseTestCase
 
 
-class GatewayHookTestCase(AioHTTPTestCase):
+class GatewayHookTestCase(AioHTTPTestCase, BaseTestCase):
     """
     Функциональный тест эндпоинта для хука клиентского приложения
     """

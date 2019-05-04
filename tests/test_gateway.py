@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from oneweb_helpdesk_chat import storage
 from oneweb_helpdesk_chat.gateways import Gateway, Message
-from tests.utils import AsyncMock
+from tests.utils import AsyncMock, BaseTestCase
 
 
 class TestGateway(Gateway):
@@ -28,7 +28,7 @@ class TestGateway(Gateway):
         return storage.Channels.WHATSAPP
 
 
-class GatewayTestCase(unittest.TestCase):
+class GatewayTestCase(BaseTestCase):
     """
     Тест для базового интерфейса шлюзов
     """

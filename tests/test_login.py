@@ -9,8 +9,10 @@ from sqlalchemy.orm import Session
 from oneweb_helpdesk_chat import storage
 import faker
 
+from tests.utils import BaseTestCase
 
-class LoginTestCase(AioHTTPTestCase):
+
+class LoginTestCase(AioHTTPTestCase, BaseTestCase):
     """
     Функциональные тесты для логина пользователя
 

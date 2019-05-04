@@ -23,7 +23,7 @@ def engine():
     if _engine is None:
         # todo: сделать вариацию для получения именно тестовой бд
         _engine = sqlalchemy.create_engine(
-            config.DB_URL, echo=True, pool_size=10, max_overflow=0
+            config.DB_URL, echo=False, pool_size=10, max_overflow=0
         )
     return _engine
 

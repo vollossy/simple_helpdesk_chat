@@ -5,8 +5,9 @@ from aiohttp import ClientResponse
 from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop, TestClient
 from aiohttp.web_app import Application
 from sqlalchemy.orm import Session
+import asyncio
 
-from oneweb_helpdesk_chat import storage
+from oneweb_helpdesk_chat import storage, security
 import faker
 
 from tests.utils import BaseTestCase
@@ -14,30 +15,38 @@ from tests.utils import BaseTestCase
 
 class LoginTestCase(AioHTTPTestCase, BaseTestCase):
     """
-    Функциональные тесты для логина пользователя
+    Функциональные тесты для логина пользователя. Данные тесты используют
+    тестовую бд и каждый раз сбрасывают ее состояние(удаляют и пересоздают все
+    таблицы).
 
     :ivar TestClient client:
     """
     def setUp(self) -> None:
         super().setUp()
-        storage.Base.metadata.create_all(storage.engine())
+        storage.database.Base.metadata.create_all(storage.database.engine())
         fake = faker.Faker()
 
-        storage.ScopedAppSession.configure(bind=storage.engine())
+        storage.database.ScopedAppSession.configure(
+            bind=storage.database.engine()
+        )
 
-        self.session = storage.ScopedAppSession()  # type: Session
+        self.session = storage.database.ScopedAppSession()  # type: Session
 
         self.user_password = fake.password()
-        self.user = storage.create_user(
-            fake.name(), fake.email(), self.user_password
+        self.user = asyncio.get_event_loop().run_until_complete(
+            security.create_user(
+                fake.name(), fake.email(), self.user_password
+            )
         )
 
     def tearDown(self) -> None:
         super().tearDown()
         self.session.commit()
 
-        storage.ScopedAppSession.remove()
-        storage.Base.metadata.drop_all(storage.engine())
+        storage.database.ScopedAppSession.remove()
+        storage.database.Base.metadata.drop_all(
+            storage.database.engine()
+        )
 
     async def get_application(self) -> Application:
         from oneweb_helpdesk_chat import app

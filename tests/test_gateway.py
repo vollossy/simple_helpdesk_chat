@@ -6,9 +6,10 @@ import asyncio
 from unittest import mock
 
 from aiohttp import web
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, Query
 
-from oneweb_helpdesk_chat import storage
+from oneweb_helpdesk_chat.storage.domain import Channel
+from oneweb_helpdesk_chat.storage import database
 from oneweb_helpdesk_chat.gateways import Gateway, Message
 from tests.utils import AsyncMock, BaseTestCase
 
@@ -25,7 +26,7 @@ class TestGateway(Gateway):
         pass
 
     def get_channel(self):
-        return storage.Channels.WHATSAPP
+        return Channel.WHATSAPP
 
 
 class GatewayTestCase(BaseTestCase):
@@ -36,19 +37,22 @@ class GatewayTestCase(BaseTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.loop = asyncio.get_event_loop()
-        storage.Base.metadata.drop_all(storage.engine())
-        storage.Base.metadata.create_all(storage.engine())
+        database.Base.metadata.drop_all(database.engine())
+        database.Base.metadata.create_all(database.engine())
 
-        storage.ScopedAppSession.configure(bind=storage.engine())
+        database.ScopedAppSession.configure(bind=database.engine())
 
-        self.gateway = TestGateway(get_session=storage.ScopedAppSession)
+        self.gateway = TestGateway(
+            customer_repository=database.CustomerRepository(),
+            dialog_repository=database.DialogRepository()
+        )
         self.request_mock = mock.MagicMock(spec=web.Request)
 
     def tearDown(self) -> None:
         super().tearDown()
-        storage.ScopedAppSession.commit()
-        storage.ScopedAppSession.remove()
-        storage.Base.metadata.drop_all(storage.engine())
+        database.ScopedAppSession.commit()
+        database.ScopedAppSession.remove()
+        database.Base.metadata.drop_all(database.engine())
 
     def test_handle_message_without_dialog(self):
         """
@@ -58,7 +62,9 @@ class GatewayTestCase(BaseTestCase):
         полученное сообщение
         """
         message_patch = Message("+79876543210", "Example text")
-        dialogs_query = storage.ScopedAppSession().query(storage.Dialog)
+        dialogs_query = database.ScopedAppSession().query(
+            database.Dialog
+        )  # type: Query
         with mock.patch.object(
             self.gateway, 'parse_message', return_value=message_patch,
             new_callable=AsyncMock
@@ -67,7 +73,7 @@ class GatewayTestCase(BaseTestCase):
             dialogs = list(dialogs_query)
             message = self.loop.run_until_complete(
                 self.gateway.handle_message(self.request_mock)
-            )  # type: storage.Message
+            )  # type: database.Message
             self.assertNotIn(message.dialog, dialogs)
 
         self.assertIn(message.dialog, dialogs_query)
@@ -78,11 +84,11 @@ class GatewayTestCase(BaseTestCase):
         создаваться
         """
         phone_number = "+79876543210"
-        customer = storage.Customer(
+        customer = database.Customer(
             name="Example user", phone_number=phone_number
         )
-        dialog = storage.Dialog(customer=customer)
-        session = storage.ScopedAppSession()  # type: Session
+        dialog = database.Dialog(customer=customer)
+        session = database.ScopedAppSession()  # type: Session
         session.add(customer)
         session.add(dialog)
         session.commit()
@@ -94,5 +100,6 @@ class GatewayTestCase(BaseTestCase):
         ):
             message = self.loop.run_until_complete(
                 self.gateway.handle_message(self.request_mock)
-            )  # type: storage.Message
+            )  # type: database.Message
             self.assertEqual(message.dialog, dialog)
+            self.assertEqual(dialog.messages[0], message)

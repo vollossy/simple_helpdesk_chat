@@ -1,7 +1,7 @@
 from aiohttp import web
 from aiohttp_session import get_session, setup, SimpleCookieStorage
 import asyncio
-from oneweb_helpdesk_chat import events, gateways, storage
+from oneweb_helpdesk_chat import events, gateways, storage, security
 from oneweb_helpdesk_chat.chat import ChatHandler
 from . import events as app_events
 
@@ -56,14 +56,11 @@ async def login(request: web.Request):
     :return:
     """
     post_data = await request.post()
-    user = await storage.fetch_results(
-        storage.ScopedAppSession().query(storage.User).filter(
-            storage.User.login == post_data["login"]
-        ),
-        'first'
+    user = await storage.default_user_repository().get_by_login(
+        post_data['login']
     )
-    password_valid = storage.validate_password(
-        user.password, post_data['password']
+    password_valid = security.validate_password(
+        getattr(user, 'password', ''), post_data['password']
     )
     if not user or not password_valid:
         raise web.HTTPUnauthorized()
@@ -105,22 +102,22 @@ async def chat(request: web.Request):
     # todo: здесь нужна проверка на то, саассайнен ли пользователь на диалог
     ws = web.WebSocketResponse()
     await  ws.prepare(request)
-    dialog = await storage.fetch_results(
-        storage.session().query(storage.Dialog).filter(storage.Dialog.id == request.match_info["dialog_id"]),
-        "one"
-    ) # type: storage.Dialog
-    if not dialog:
-        raise web.HTTPNotFound()
-
-    messages = dialogs_queues[dialog.id]
-    user_id = get_session(request)["id"]
-    user = await storage.fetch_results(
-        storage.session().query(storage.User).filter(storage.User.id == user_id)
-    )
-
-    handler = ChatHandler(ws=ws, dialog=dialog, user=user)
-
-    await asyncio.gather(handler.read_from_customer(messages), handler.write_to_customer())
+    # dialog = await storage_to_change.fetch_results(
+    #     storage_to_change.session().query(storage_to_change.Dialog).filter(storage_to_change.Dialog.id == request.match_info["dialog_id"]),
+    #     "one"
+    # ) # type: storage_to_change.Dialog
+    # if not dialog:
+    #     raise web.HTTPNotFound()
+    #
+    # messages = dialogs_queues[dialog.id]
+    # user_id = get_session(request)["id"]
+    # user = await storage_to_change.fetch_results(
+    #     storage_to_change.session().query(storage_to_change.User).filter(storage_to_change.User.id == user_id)
+    # )
+    #
+    # handler = ChatHandler(ws=ws, dialog=dialog, user=user)
+    #
+    # await asyncio.gather(handler.read_from_customer(messages), handler.write_to_customer())
 
     return ws
 

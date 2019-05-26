@@ -4,10 +4,9 @@
 """
 import string
 from aiohttp import web
-from sqlalchemy.orm import Query, Session
 
-from oneweb_helpdesk_chat import storage
 from abc import ABCMeta, abstractmethod
+from . import storage
 
 
 class Message:
@@ -30,22 +29,19 @@ class Gateway(metaclass=ABCMeta):
     методы handle_message и send_message. Шлюзы используются в методе
     :meth:`app.gateway_hook`, а также в модуле :mod:`chat` для отправки
     сообщений в сервис
+
+    :ivar: DialogRepository dialog_repository
     """
 
-    def __init__(self, get_session: callable) -> None:
+    def __init__(self, customer_repository: storage.CustomerRepository,
+                 dialog_repository: storage.DialogRepository) -> None:
         """
-
-        :param get_session: Метод, который возвращает сессию для работы с бд в
-          данном классе, в каждом методе текущего класса, где потребуется работа
-          с бд, будет вызван этот метод(см.
-          https://docs.sqlalchemy.org/en/13/orm/contextual.html
-            #unitofwork-contextual
-          )
+        :param customer_repository: Репозиторий для клиентов
+        :param dialog_repository: Репозиторий для диалогов
         """
         super().__init__()
-        self.get_dialog_query = Query(storage.Dialog).join(storage.Customer)
-        self.get_customer_query = Query(storage.Customer)
-        self.get_session = get_session
+        self.customer_repository = customer_repository
+        self.dialog_repository = dialog_repository
 
     async def handle_message(self, request: web.Request) -> storage.Message:
         """
@@ -54,36 +50,29 @@ class Gateway(metaclass=ABCMeta):
         :param request:
         :return:
         """
-        session = self.get_session()  # type: Session
         raw_message = await self.parse_message(request)
-        dialog = await storage.fetch_results(
-            query=self.get_dialog_query.with_session(session).filter(
-                storage.Customer.phone_number == raw_message.phone_number
-            ),
-            fetch_method="first"
+        dialog = await self.dialog_repository.get_by_phone(
+            raw_message.phone_number
         )
+
         if dialog is None:
-            customer = await storage.fetch_results(
-                self.get_customer_query.with_session(session).filter(
-                    storage.Customer.phone_number == raw_message.phone_number
-                ),
-                fetch_method="first"
+            customer = await self.customer_repository.get_by_phone(
+                raw_message.phone_number
             )
             if customer is None:
-                customer = session.add(
-                    storage.Customer(
-                        name=raw_message.user_name,
-                        phone_number=raw_message.phone_number
-                    )
+                customer = storage.Customer(
+                    name=raw_message.user_name,
+                    phone_number=raw_message.phone_number
                 )
-            # todo: добавить здесь атачмент сообщения
+                await self.customer_repository.save(customer)
             dialog = storage.Dialog(customer=customer)
 
         message = storage.Message(
             channel=self.get_channel(), text=raw_message.text
         )
         dialog.messages.append(message)
-        session.add(dialog)
+
+        await self.dialog_repository.save(dialog)
 
         return message
 

@@ -6,6 +6,7 @@ from asyncio import Queue
 from aiohttp import web
 
 from oneweb_helpdesk_chat import gateways
+from oneweb_helpdesk_chat.queues import DictRepository
 from oneweb_helpdesk_chat.storage import Message, Dialog, User
 import json
 
@@ -42,39 +43,50 @@ class MessageDecoder(json.JSONDecoder):
 
 class ChatHandler:
     """
-    Хендлер для обработки чтения сообщения от клиента и отправки их ему же. Это просто класс, который объединяет в себе
-    задачу чтения сообщения от клиента и задачу отправки.
+    Хендлер для обработки чтения сообщения от клиента и отправки их ему же.
+    Это просто класс, который объединяет в себе задачу чтения сообщения от
+    клиента и задачу отправки.
     """
 
-    def __init__(self, ws: web.WebSocketResponse, dialog: Dialog, user: User) -> None:
+    def __init__(
+            self, ws: web.WebSocketResponse, dialog: Dialog, user: User,
+            queues_repository: DictRepository
+    ) -> None:
         super().__init__()
         self.ws = ws
         self.dialog = dialog
         self.user = user
+        self.queues_repository = queues_repository
 
-    async def read_from_customer(self, message_queue: Queue):
+    async def read_from_customer(self):
         """
-        Таска, которая обрабатывает сообщения от клиента и пишет их в открытый в данный момент вебсокет. Чтение
-        прекращается, когда соединение с вебсокетом разрывается.
-
-        :param message_queue: очередь входящих сообщений от клиента
+        Таска, которая обрабатывает сообщения от клиента и пишет их в открытый
+        в данный момент вебсокет. Чтение  прекращается, когда соединение с
+        вебсокетом разрывается.
         """
         try:
             while not self.ws.closed:
-                message = await message_queue.get()  # type: Message
-                await self.ws.send_json(message, dumps=lambda x: json.dumps(x, cls=MessageEncoder))
+                message = await self.queues_repository.get(
+                    str(self.dialog.id)
+                )  # type: Message
+                await self.ws.send_json(
+                    message, dumps=lambda x: json.dumps(x, cls=MessageEncoder)
+                )
         except:
             # todo: добавить сюда логгирование исключения
             raise
 
     async def write_to_customer(self):
         """
-        Обработка отправки сообщения клиенту. Эта таска читает сообщение от клиента, сохраняет его в бд и отправляет его
+        Обработка отправки сообщения клиенту. Эта таска читает сообщение от
+        клиента пользователя(сотрудника тп), сохраняет его в бд и отправляет
         через шлюз клиенту
         :return:
         """
         while not self.ws.closed:
-            message = await self.ws.receive_json(loads=lambda x: json.loads(x, cls=MessageDecoder))
+            message = await self.ws.receive_json(
+                loads=lambda x: json.loads(x, cls=MessageDecoder)
+            )
             message.dialog = self.dialog
             gateway = gateways.repository.get_gateway(message.channel)
             gateway.send_message(message)

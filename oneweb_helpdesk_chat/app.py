@@ -1,9 +1,11 @@
+import asyncio
+
 from aiohttp import web
 from aiohttp_session import get_session, setup, SimpleCookieStorage
-import asyncio
 from oneweb_helpdesk_chat import events, gateways, storage, security
 from oneweb_helpdesk_chat.chat import ChatHandler
 from . import events as app_events
+from . import queues
 
 
 routes = web.RouteTableDef()
@@ -12,9 +14,10 @@ routes = web.RouteTableDef()
 # маппинг очередей сообщений для отдельных диалогов. В качестве ключей исполь
 # зуется идентификатор диалога в нашей бд, в качестве значений - очередь
 # сообщений. Каждый раз, когда приходит новое сообщение в диалог, оно будет
-# добавлено в очередь для этого диалога
+# добавлено в очередь для этого диалога. Этот объект должен реализовывать
+# интерфейс словаря(методы __set__, __get__ и get()).
 # todo: это нужно будет перепилить для меньшего потребления памяти
-dialogs_queues = {}
+dialogs_queues = queues.DictRepository()
 
 
 @routes.route("*", "/gateways/{gateway_alias}", name="gateway-hook")
@@ -33,10 +36,7 @@ async def gateway_hook(request: web.Request):
     # асинхронный вызов, т.к. обработка может быть довольно длительной
     message = await gateway.handle_message(request)
 
-    if message.dialog_id not in dialogs_queues:
-        dialogs_queues[message.dialog_id] = asyncio.Queue()
-
-    await dialogs_queues[message.dialog_id].put(message)
+    await dialogs_queues.put(str(message.dialog_id), message)
 
     if not message.dialog.assigned_user:
         await app_events.events_queue.put(app_events.Event(
@@ -94,14 +94,29 @@ async def events(request: web.Request):
 @routes.route("GET", "/chat/{dialog_id}")
 async def chat(request: web.Request):
     """
-    Непосредственно чат между кастомером и работником тп. В данном случае клиентом будет всегда клиентское устройство
-    работника т.п.
+    Непосредственно чат между кастомером и работником тп. В данном случае
+    клиентом будет всегда клиентское устройство работника т.п.
     :param request:
     :return:
     """
     # todo: здесь нужна проверка на то, саассайнен ли пользователь на диалог
     ws = web.WebSocketResponse()
     await  ws.prepare(request)
+    dialog = await storage.default_dialogs_repository().get_by_id(
+        request.match_info["dialog_id"]
+    )
+    if not dialog:
+        raise web.HTTPNotFound
+
+    sess = await get_session(request)
+    user = await storage.default_user_repository().get_by_id(sess['id'])
+    handler = ChatHandler(
+        ws=ws, dialog=dialog, user=user
+    )
+    await asyncio.gather(
+        handler.read_from_customer(await dialogs_queues.get(dialog.id))
+    )
+
     # dialog = await storage_to_change.fetch_results(
     #     storage_to_change.session().query(storage_to_change.Dialog).filter(storage_to_change.Dialog.id == request.match_info["dialog_id"]),
     #     "one"

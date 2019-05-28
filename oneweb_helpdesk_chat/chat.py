@@ -6,6 +6,7 @@ from asyncio import Queue
 from aiohttp import web
 
 from oneweb_helpdesk_chat import gateways
+from oneweb_helpdesk_chat.gateways import Repository
 from oneweb_helpdesk_chat.queues import DictRepository
 from oneweb_helpdesk_chat.storage import Message, Dialog, User
 import json
@@ -26,7 +27,7 @@ class MessageEncoder(json.JSONEncoder):
                 "id": o.dialog.customer.id,
                 "name": o.dialog.customer.name
             },
-            "datetime": o.datetime.strftime(DEFAULT_DT_FORMAT)
+            "datetime": o.created_at.strftime(DEFAULT_DT_FORMAT)
         }
 
 
@@ -50,13 +51,17 @@ class ChatHandler:
 
     def __init__(
             self, ws: web.WebSocketResponse, dialog: Dialog, user: User,
-            queues_repository: DictRepository
+            queues_repository: DictRepository,
+            gateways_repository: Repository = None
     ) -> None:
         super().__init__()
         self.ws = ws
         self.dialog = dialog
         self.user = user
         self.queues_repository = queues_repository
+        self.gw_repository = (
+            gateways_repository if gateways_repository else  gateways.repository
+        )
 
     async def read_from_customer(self):
         """
@@ -88,5 +93,5 @@ class ChatHandler:
                 loads=lambda x: json.loads(x, cls=MessageDecoder)
             )
             message.dialog = self.dialog
-            gateway = gateways.repository.get_gateway(message.channel)
+            gateway = self.gw_repository.get_gateway(message.channel)
             gateway.send_message(message)

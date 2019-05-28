@@ -111,33 +111,19 @@ async def chat(request: web.Request):
     sess = await get_session(request)
     user = await storage.default_user_repository().get_by_id(sess['id'])
     handler = ChatHandler(
-        ws=ws, dialog=dialog, user=user
+        ws=ws, dialog=dialog, user=user, queues_repository=dialogs_queues
     )
     await asyncio.gather(
-        handler.read_from_customer(await dialogs_queues.get(dialog.id))
+        handler.read_from_customer(), handler.write_to_customer()
     )
-
-    # dialog = await storage_to_change.fetch_results(
-    #     storage_to_change.session().query(storage_to_change.Dialog).filter(storage_to_change.Dialog.id == request.match_info["dialog_id"]),
-    #     "one"
-    # ) # type: storage_to_change.Dialog
-    # if not dialog:
-    #     raise web.HTTPNotFound()
-    #
-    # messages = dialogs_queues[dialog.id]
-    # user_id = get_session(request)["id"]
-    # user = await storage_to_change.fetch_results(
-    #     storage_to_change.session().query(storage_to_change.User).filter(storage_to_change.User.id == user_id)
-    # )
-    #
-    # handler = ChatHandler(ws=ws, dialog=dialog, user=user)
-    #
-    # await asyncio.gather(handler.read_from_customer(messages), handler.write_to_customer())
 
     return ws
 
 
 async def make_app():
+    """
+    Фабрика для создания приложения
+    """
     app = web.Application()
     setup(app, SimpleCookieStorage())
     app.add_routes(routes)

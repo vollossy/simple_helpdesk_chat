@@ -89,7 +89,7 @@ class Gateway(metaclass=ABCMeta):
         """
 
     @abstractmethod
-    def send_message(self, message):
+    def send_message(self, message: storage.Message):
         """
         Отправка собщения в сервис
         :param message:

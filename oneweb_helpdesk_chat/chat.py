@@ -11,6 +11,8 @@ from oneweb_helpdesk_chat.queues import DictRepository
 from oneweb_helpdesk_chat.storage import Message, Dialog, User
 import json
 
+from oneweb_helpdesk_chat.storage.database import MessagesRepository
+
 DEFAULT_DT_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -33,7 +35,8 @@ class MessageEncoder(json.JSONEncoder):
 
 class MessageDecoder(json.JSONDecoder):
     """
-    Декодировщик для отдельного сообщения, преобразует словарь в экземпляр сообщения
+    Декодировщик для отдельного сообщения, преобразует словарь в экземпляр
+    сообщения
     """
 
     def decode(self, s, *args):
@@ -52,7 +55,8 @@ class ChatHandler:
     def __init__(
             self, ws: web.WebSocketResponse, dialog: Dialog, user: User,
             queues_repository: DictRepository,
-            gateways_repository: Repository = None
+            gateways_repository: Repository = None,
+            messages_repository: MessagesRepository = None
     ) -> None:
         super().__init__()
         self.ws = ws
@@ -60,7 +64,10 @@ class ChatHandler:
         self.user = user
         self.queues_repository = queues_repository
         self.gw_repository = (
-            gateways_repository if gateways_repository else  gateways.repository
+            gateways_repository if gateways_repository else gateways.repository
+        )
+        self.messages_repository = (
+            messages_repository if messages_repository else MessagesRepository()
         )
 
     async def read_from_customer(self):
@@ -93,5 +100,6 @@ class ChatHandler:
                 loads=lambda x: json.loads(x, cls=MessageDecoder)
             )
             message.dialog = self.dialog
+            await self.messages_repository.save(message)
             gateway = self.gw_repository.get_gateway(message.channel)
             gateway.send_message(message)

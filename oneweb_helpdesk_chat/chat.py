@@ -3,7 +3,7 @@
 """
 from asyncio import Queue
 
-from aiohttp import web
+from aiohttp import web, WSMsgType
 
 from oneweb_helpdesk_chat import gateways
 from oneweb_helpdesk_chat.gateways import Repository
@@ -95,11 +95,12 @@ class ChatHandler:
         через шлюз клиенту
         :return:
         """
-        while not self.ws.closed:
-            message = await self.ws.receive_json(
-                loads=lambda x: json.loads(x, cls=MessageDecoder)
-            )
-            message.dialog = self.dialog
-            await self.messages_repository.save(message)
-            gateway = self.gw_repository.get_gateway(message.channel)
-            gateway.send_message(message)
+        async for msg in self.ws:
+            if msg.type == WSMsgType.TEXT:
+                message = json.loads(msg, cls=MessageDecoder)
+                message.dialog = self.dialog
+                await self.messages_repository.save(message)
+                gateway = self.gw_repository.get_gateway(message.channel)
+                gateway.send_message(message)
+            elif msg.type == WSMsgType.ERROR:
+                pass

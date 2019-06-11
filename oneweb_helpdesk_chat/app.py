@@ -103,13 +103,13 @@ async def chat(request: web.Request):
     ws = web.WebSocketResponse()
     await  ws.prepare(request)
     dialog = await storage.default_dialogs_repository().get_by_id(
-        request.match_info["dialog_id"]
+        int(request.match_info["dialog_id"])
     )
     if not dialog:
         raise web.HTTPNotFound
 
     sess = await get_session(request)
-    user = await storage.default_user_repository().get_by_id(sess['id'])
+    user = await storage.default_user_repository().get_by_id(int(sess['id']))
     handler = ChatHandler(
         ws=ws, dialog=dialog, user=user, queues_repository=dialogs_queues
     )

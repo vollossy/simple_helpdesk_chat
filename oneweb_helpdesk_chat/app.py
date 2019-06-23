@@ -1,6 +1,11 @@
 import asyncio
+import logging
+from typing import Optional, Sequence, Mapping, Any
 
 from aiohttp import web
+from aiohttp.log import web_logger
+from aiohttp.web_app import _Middleware
+from aiohttp.web_urldispatcher import UrlDispatcher
 from aiohttp_session import get_session, setup, SimpleCookieStorage
 from oneweb_helpdesk_chat import events, gateways, storage, security
 from oneweb_helpdesk_chat.chat import ChatHandler
@@ -11,13 +16,32 @@ from . import queues
 routes = web.RouteTableDef()
 
 
-# маппинг очередей сообщений для отдельных диалогов. В качестве ключей исполь
-# зуется идентификатор диалога в нашей бд, в качестве значений - очередь
-# сообщений. Каждый раз, когда приходит новое сообщение в диалог, оно будет
-# добавлено в очередь для этого диалога. Этот объект должен реализовывать
-# интерфейс словаря(методы __set__, __get__ и get()).
-# todo: это нужно будет перепилить для меньшего потребления памяти
-dialogs_queues = queues.DictRepository()
+class Application(web.Application):
+    """
+    Кастомный класс приложения.
+    """
+
+    def __init__(
+            self, *, logger: logging.Logger = web_logger,
+            router: Optional[UrlDispatcher] = None,
+            middlewares: Sequence[_Middleware] = (),
+            handler_args: Mapping[str, Any] = None,
+            client_max_size: int = 1024 ** 2,
+            loop: Optional[asyncio.AbstractEventLoop] = None,
+            debug: Any = ...,
+            dialogs_queues: queues.DictRepository = queues.DictRepository()
+    ) -> None:
+        super().__init__(logger=logger, router=router, middlewares=middlewares,
+                         handler_args=handler_args,
+                         client_max_size=client_max_size, loop=loop,
+                         debug=debug)
+        # маппинг очередей сообщений для отдельных диалогов. В качестве ключей
+        # используется идентификатор диалога в нашей бд, в качестве значений -
+        # очередь сообщений. Каждый раз, когда приходит новое сообщение в
+        # диалог, оно будет добавлено в очередь для этого диалога. Этот объект
+        # должен реализовывать интерфейс словаря(методы __set__, __get__ и
+        # get()).
+        self.dialogs_queues = dialogs_queues
 
 
 @routes.route("*", "/gateways/{gateway_alias}", name="gateway-hook")
@@ -36,7 +60,7 @@ async def gateway_hook(request: web.Request):
     # асинхронный вызов, т.к. обработка может быть довольно длительной
     message = await gateway.handle_message(request)
 
-    await dialogs_queues.put(str(message.dialog_id), message)
+    await request.app.dialogs_queues.put(str(message.dialog_id), message)
 
     if not message.dialog.assigned_user:
         await app_events.events_queue.put(app_events.Event(
@@ -111,7 +135,8 @@ async def chat(request: web.Request):
     sess = await get_session(request)
     user = await storage.default_user_repository().get_by_id(int(sess['id']))
     handler = ChatHandler(
-        ws=ws, dialog=dialog, user=user, queues_repository=dialogs_queues
+        ws=ws, dialog=dialog, user=user,
+        queues_repository=request.app.dialogs_queues
     )
     await asyncio.gather(
         handler.read_from_customer(), handler.write_to_customer()
@@ -124,7 +149,7 @@ async def make_app():
     """
     Фабрика для создания приложения
     """
-    app = web.Application()
+    app = Application(dialogs_queues=queues.DictRepository())
     setup(app, SimpleCookieStorage())
     app.add_routes(routes)
     return app

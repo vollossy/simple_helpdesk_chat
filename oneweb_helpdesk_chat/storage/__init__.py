@@ -1,7 +1,9 @@
 """
 Этот пакет представляет уровень доступа к данным
 """
-from .database import DialogRepository, CustomerRepository, UserRepository
+from .database import (
+    DialogRepository, CustomerRepository, UserRepository, MessagesRepository
+)
 from .database import Customer, Dialog, Message, User
 
 

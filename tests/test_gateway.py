@@ -36,7 +36,7 @@ class GatewayTestCase(BaseTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.loop = asyncio.get_event_loop()
+        self.loop = asyncio.new_event_loop()
         database.Base.metadata.drop_all(database.engine())
         database.Base.metadata.create_all(database.engine())
 
@@ -53,6 +53,7 @@ class GatewayTestCase(BaseTestCase):
         database.ScopedAppSession.commit()
         database.ScopedAppSession.remove()
         database.Base.metadata.drop_all(database.engine())
+        self.loop.close()
 
     def test_handle_message_without_dialog(self):
         """

@@ -11,14 +11,15 @@ from oneweb_helpdesk_chat.queues import DictRepository
 from oneweb_helpdesk_chat.storage import Message, Dialog, User
 import json
 
-from oneweb_helpdesk_chat.storage.database import MessagesRepository
+from oneweb_helpdesk_chat.storage import MessagesRepository
 
 DEFAULT_DT_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
 class MessageEncoder(json.JSONEncoder):
     """
-    Кодировщик для отдельного сообщения. Данный класс предполагает преобразование сообщение в dict, подходящий для
+    Кодировщик для отдельного сообщения. Данный класс предполагает
+    преобразование сообщение в dict, подходящий для
     передачи в соответствии с протоколом.
     """
 
@@ -29,7 +30,8 @@ class MessageEncoder(json.JSONEncoder):
                 "id": o.dialog.customer.id,
                 "name": o.dialog.customer.name
             },
-            "datetime": o.created_at.strftime(DEFAULT_DT_FORMAT)
+            "datetime": o.created_at.strftime(DEFAULT_DT_FORMAT),
+            "channel": o.channel
         }
 
 
@@ -41,7 +43,7 @@ class MessageDecoder(json.JSONDecoder):
 
     def decode(self, s, *args):
         obj = super().decode(s, *args)
-        message = Message(text=obj["text"])
+        message = Message(text=obj["text"], channel=obj["channel"])
         return message
 
 
@@ -97,7 +99,7 @@ class ChatHandler:
         """
         async for msg in self.ws:
             if msg.type == WSMsgType.TEXT:
-                message = json.loads(msg, cls=MessageDecoder)
+                message = json.loads(msg.data, cls=MessageDecoder)
                 message.dialog = self.dialog
                 await self.messages_repository.save(message)
                 gateway = self.gw_repository.get_gateway(message.channel)

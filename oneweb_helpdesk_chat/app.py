@@ -1,20 +1,47 @@
-from aiohttp import web
-from aiohttp_session import get_session, setup, SimpleCookieStorage
 import asyncio
+import logging
+from typing import Optional, Sequence, Mapping, Any
+
+from aiohttp import web
+from aiohttp.log import web_logger
+from aiohttp.web_app import _Middleware
+from aiohttp.web_urldispatcher import UrlDispatcher
+from aiohttp_session import get_session, setup, SimpleCookieStorage
 from oneweb_helpdesk_chat import events, gateways, storage, security
 from oneweb_helpdesk_chat.chat import ChatHandler
 from . import events as app_events
+from . import queues
 
 
 routes = web.RouteTableDef()
 
 
-# маппинг очередей сообщений для отдельных диалогов. В качестве ключей исполь
-# зуется идентификатор диалога в нашей бд, в качестве значений - очередь
-# сообщений. Каждый раз, когда приходит новое сообщение в диалог, оно будет
-# добавлено в очередь для этого диалога
-# todo: это нужно будет перепилить для меньшего потребления памяти
-dialogs_queues = {}
+class Application(web.Application):
+    """
+    Кастомный класс приложения.
+    """
+
+    def __init__(
+            self, *, logger: logging.Logger = web_logger,
+            router: Optional[UrlDispatcher] = None,
+            middlewares: Sequence[_Middleware] = (),
+            handler_args: Mapping[str, Any] = None,
+            client_max_size: int = 1024 ** 2,
+            loop: Optional[asyncio.AbstractEventLoop] = None,
+            debug: Any = ...,
+            dialogs_queues: queues.DictRepository = queues.DictRepository()
+    ) -> None:
+        super().__init__(logger=logger, router=router, middlewares=middlewares,
+                         handler_args=handler_args,
+                         client_max_size=client_max_size, loop=loop,
+                         debug=debug)
+        # маппинг очередей сообщений для отдельных диалогов. В качестве ключей
+        # используется идентификатор диалога в нашей бд, в качестве значений -
+        # очередь сообщений. Каждый раз, когда приходит новое сообщение в
+        # диалог, оно будет добавлено в очередь для этого диалога. Этот объект
+        # должен реализовывать интерфейс словаря(методы __set__, __get__ и
+        # get()).
+        self.dialogs_queues = dialogs_queues
 
 
 @routes.route("*", "/gateways/{gateway_alias}", name="gateway-hook")
@@ -33,10 +60,7 @@ async def gateway_hook(request: web.Request):
     # асинхронный вызов, т.к. обработка может быть довольно длительной
     message = await gateway.handle_message(request)
 
-    if message.dialog_id not in dialogs_queues:
-        dialogs_queues[message.dialog_id] = asyncio.Queue()
-
-    await dialogs_queues[message.dialog_id].put(message)
+    await request.app.dialogs_queues.put(str(message.dialog_id), message)
 
     if not message.dialog.assigned_user:
         await app_events.events_queue.put(app_events.Event(
@@ -94,36 +118,38 @@ async def events(request: web.Request):
 @routes.route("GET", "/chat/{dialog_id}")
 async def chat(request: web.Request):
     """
-    Непосредственно чат между кастомером и работником тп. В данном случае клиентом будет всегда клиентское устройство
-    работника т.п.
+    Непосредственно чат между кастомером и работником тп. В данном случае
+    клиентом будет всегда клиентское устройство работника т.п.
     :param request:
     :return:
     """
     # todo: здесь нужна проверка на то, саассайнен ли пользователь на диалог
     ws = web.WebSocketResponse()
     await  ws.prepare(request)
-    # dialog = await storage_to_change.fetch_results(
-    #     storage_to_change.session().query(storage_to_change.Dialog).filter(storage_to_change.Dialog.id == request.match_info["dialog_id"]),
-    #     "one"
-    # ) # type: storage_to_change.Dialog
-    # if not dialog:
-    #     raise web.HTTPNotFound()
-    #
-    # messages = dialogs_queues[dialog.id]
-    # user_id = get_session(request)["id"]
-    # user = await storage_to_change.fetch_results(
-    #     storage_to_change.session().query(storage_to_change.User).filter(storage_to_change.User.id == user_id)
-    # )
-    #
-    # handler = ChatHandler(ws=ws, dialog=dialog, user=user)
-    #
-    # await asyncio.gather(handler.read_from_customer(messages), handler.write_to_customer())
+    dialog = await storage.default_dialogs_repository().get_by_id(
+        int(request.match_info["dialog_id"])
+    )
+    if not dialog:
+        raise web.HTTPNotFound
+
+    sess = await get_session(request)
+    user = await storage.default_user_repository().get_by_id(int(sess['id']))
+    handler = ChatHandler(
+        ws=ws, dialog=dialog, user=user,
+        queues_repository=request.app.dialogs_queues
+    )
+    await asyncio.gather(
+        handler.read_from_customer(), handler.write_to_customer()
+    )
 
     return ws
 
 
 async def make_app():
-    app = web.Application()
+    """
+    Фабрика для создания приложения
+    """
+    app = Application(dialogs_queues=queues.DictRepository())
     setup(app, SimpleCookieStorage())
     app.add_routes(routes)
     return app

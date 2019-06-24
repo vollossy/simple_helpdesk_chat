@@ -247,3 +247,8 @@ class UserRepository(BaseRepository[User]):
         return await self.get_one_by_field('login', login)
 
 
+class MessagesRepository(BaseRepository[Message]):
+    """
+    Репозиторий для работы с сообщениями
+    """
+    model_class = Message

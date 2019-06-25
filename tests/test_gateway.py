@@ -1,7 +1,6 @@
 """
 Модульные тесты для класса шлюза
 """
-import unittest
 import asyncio
 from unittest import mock
 
@@ -26,7 +25,7 @@ class TestGateway(Gateway):
         pass
 
     def get_channel(self):
-        return Channel.WHATSAPP
+        return Channel.TEST
 
 
 class GatewayTestCase(BaseTestCase):
@@ -88,7 +87,9 @@ class GatewayTestCase(BaseTestCase):
         customer = database.Customer(
             name="Example user", phone_number=phone_number
         )
-        dialog = database.Dialog(customer=customer)
+        dialog = database.Dialog(
+            customer=customer, channel=self.gateway.get_channel()
+        )
         session = database.ScopedAppSession()  # type: Session
         session.add(customer)
         session.add(dialog)

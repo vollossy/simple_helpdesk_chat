@@ -21,6 +21,8 @@ class Channel(Enum):
     """
     WHATSAPP = "whatsapp"
     VIBER = "VIBER"
+    # тестовый канал для всяких разных нужд
+    TEST = "test"
 
 
 class Customer:
@@ -75,7 +77,7 @@ class Dialog:
     """
 
     def __init__(self, ident: int = None, customer: Customer = None,
-                 assigned_user: User = None,
+                 assigned_user: User = None, channel: Channel = None,
                  messages: typing.List['Message'] = None) -> None:
         if messages is None:
             messages = []
@@ -85,6 +87,7 @@ class Dialog:
         self.customer = customer
         self.assigned_user = assigned_user
         self.messages = messages
+        self.channel = channel
 
 
 class Message:
@@ -94,12 +97,11 @@ class Message:
     :ivar int user_id: Идентификатор работника тп-отправителя сообщения, если null, значит сообщение было отправлено
       клиентом из указанного диалога
     """
-    def __init__(self, ident:int = None, channel: Channel = None,
+    def __init__(self, ident:int = None,
                  text: str = None, created_at: datetime = None,
                  dialog: Dialog = None) -> None:
         super().__init__()
         self.id = ident
-        self.channel = channel
         self.text = text
         self.created_at = created_at
         self.dialog = dialog

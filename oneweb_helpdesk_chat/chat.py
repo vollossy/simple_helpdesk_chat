@@ -1,9 +1,7 @@
 """
 Специфичные для чата компоненты
 """
-from asyncio import Queue
-
-from aiohttp import web, WSMsgType
+from aiohttp import web, WSMsgType, WSMessage
 
 from oneweb_helpdesk_chat import gateways
 from oneweb_helpdesk_chat.gateways import Repository
@@ -30,8 +28,7 @@ class MessageEncoder(json.JSONEncoder):
                 "id": o.dialog.customer.id,
                 "name": o.dialog.customer.name
             },
-            "datetime": o.created_at.strftime(DEFAULT_DT_FORMAT),
-            "channel": o.channel
+            "datetime": o.created_at.strftime(DEFAULT_DT_FORMAT)
         }
 
 
@@ -43,7 +40,7 @@ class MessageDecoder(json.JSONDecoder):
 
     def decode(self, s, *args):
         obj = super().decode(s, *args)
-        message = Message(text=obj["text"], channel=obj["channel"])
+        message = Message(text=obj["text"])
         return message
 
 
@@ -97,12 +94,14 @@ class ChatHandler:
         через шлюз клиенту
         :return:
         """
-        async for msg in self.ws:
+        async for msg in self.ws:  # type: WSMessage
             if msg.type == WSMsgType.TEXT:
-                message = json.loads(msg.data, cls=MessageDecoder)
+                message = json.loads(
+                    msg.data, cls=MessageDecoder
+                )  # type: Message
                 message.dialog = self.dialog
                 await self.messages_repository.save(message)
-                gateway = self.gw_repository.get_gateway(message.channel)
+                gateway = self.gw_repository.get_gateway(self.dialog.channel)
                 gateway.send_message(message)
             elif msg.type == WSMsgType.ERROR:
                 pass

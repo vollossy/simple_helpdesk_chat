@@ -2,10 +2,11 @@
 Шлюзы для взаимодейстия с серверами чатов. Данный модуль предназначен для
 обработки http-запросов от сервисов
 """
-import string
 from aiohttp import web
 
 from abc import ABCMeta, abstractmethod
+
+from oneweb_helpdesk_chat.storage.domain import Channel
 from . import storage
 
 
@@ -65,11 +66,11 @@ class Gateway(metaclass=ABCMeta):
                     phone_number=raw_message.phone_number
                 )
                 await self.customer_repository.save(customer)
-            dialog = storage.Dialog(customer=customer)
+            dialog = storage.Dialog(
+                customer=customer, channel=self.get_channel()
+            )
 
-        message = storage.Message(
-            channel=self.get_channel(), text=raw_message.text
-        )
+        message = storage.Message(text=raw_message.text)
         dialog.messages.append(message)
 
         await self.dialog_repository.save(dialog)
@@ -77,7 +78,7 @@ class Gateway(metaclass=ABCMeta):
         return message
 
     @abstractmethod
-    def get_channel(self):
+    def get_channel(self) -> Channel:
         pass
 
     @abstractmethod
@@ -107,7 +108,7 @@ class Repository:
 
         self._repository = {}
 
-    def register_gateway(self, alias: str, gateway: Gateway):
+    def register_gateway(self, alias: Channel, gateway: Gateway):
         """
         Регистрирует шлюз в репозитории. Один и тот же шлюз может быть
         зарегистрирован под разными названиями.
@@ -115,10 +116,6 @@ class Repository:
         :param gateway: Непосредственно шлюз
         :return:
         """
-        if string.whitespace in alias:
-            raise ValueError(
-                "Gateway alias can't contain any whitespace characters"
-            )
         self._repository[alias] = gateway
 
     def unregister_gateway(self, alias: str):
@@ -129,7 +126,7 @@ class Repository:
         """
         return self._repository.pop(alias)
 
-    def get_gateway(self, alias: str) -> Gateway:
+    def get_gateway(self, alias: Channel) -> Gateway:
         """
         Возвращает шлюз из репозитория по его псевдониму
         :param alias:

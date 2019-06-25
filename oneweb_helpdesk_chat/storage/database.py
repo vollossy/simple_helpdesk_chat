@@ -104,6 +104,10 @@ class Dialog(Base, domain.Dialog):
     # assigned_user_id будет постоянно меняться
     # todo: нужно будет добавть логгирование смены пользователя
     assigned_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    # Канал, к которому привязан диалог
+    channel = Column(
+        sqlalchemy.Enum(domain.Channel, name='channels'), nullable=False
+    )
 
     customer = relationship("Customer", back_populates="dialogs")
     assigned_user = relationship("User", back_populates="dialogs")
@@ -122,10 +126,6 @@ class Message(Base, domain.Message):
     id = Column(Integer, primary_key=True, autoincrement=True)
 
     user_id = Column(Integer, nullable=True)
-    channel = Column(
-        sqlalchemy.Enum(domain.Channel, name='channels'),
-        nullable=False
-    )
     # метаданные сообщения, пришедшие от канала
     # channel_metadata = Column(sqlalchemy.JSON, nullable=True)
     # идентификатор связанного диалога

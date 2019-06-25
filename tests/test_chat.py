@@ -5,7 +5,7 @@ import asyncio
 import json
 from datetime import datetime
 from unittest import TestCase, mock
-from aiohttp import web, ClientWebSocketResponse, WSMessage, WSMsgType
+from aiohttp import ClientWebSocketResponse, WSMessage, WSMsgType
 from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
 from aiohttp.web_app import Application
 
@@ -15,6 +15,7 @@ from oneweb_helpdesk_chat.chat import (
 from oneweb_helpdesk_chat.queues import DictRepository
 from oneweb_helpdesk_chat.storage import Dialog, User, Customer, Message
 from oneweb_helpdesk_chat.storage.database import MessagesRepository
+from oneweb_helpdesk_chat.storage.domain import Channel
 from tests import utils
 from oneweb_helpdesk_chat.gateways import Repository
 from tests.utils import BaseTestCase
@@ -82,11 +83,11 @@ class ChatHandlerTestCase(TestCase):
         и оно уже отправляется через шлюз непосредственно в сервис, который
         работает с этими сообщениями. при этом сообщение будет сохранено в бд
         """
-        dialog = Dialog(id=123)
+        dialog = Dialog(id=123, channel=Channel.TEST)
         dialog.customer = Customer(id=1, name="Example customer")
         user = User(id=123)
         message_to_send = Message(
-            text="example text", channel="example", dialog=dialog,
+            text="example text", dialog=dialog,
             created_at=datetime.today()
         )
 
@@ -102,7 +103,7 @@ class ChatHandlerTestCase(TestCase):
 
         gateways_repository = Repository()
         gateways_repository.register_gateway(
-            "example", gateway_mock
+            dialog.channel, gateway_mock
         )
 
         handler = ChatHandler(
@@ -135,7 +136,8 @@ class ChatEndpointTestCase(AioHTTPTestCase, BaseTestCase):
 
         # настройка работы с диалогом
         self.dialog = Dialog(
-            id=1, customer_id=2, assigned_user_id=3, customer=self.customer
+            id=1, customer_id=2, assigned_user_id=3, customer=self.customer,
+            channel=Channel.TEST
         )
         self.dialogs_repository_mock = mock.MagicMock(
             spec=storage.DialogRepository

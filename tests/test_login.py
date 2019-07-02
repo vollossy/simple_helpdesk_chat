@@ -7,10 +7,10 @@ from aiohttp.web_app import Application
 from sqlalchemy.orm import Session
 import asyncio
 
-from oneweb_helpdesk_chat import storage, security
+from oneweb_helpdesk_chat import storage, security, config
 import faker
 
-from tests.utils import BaseTestCase
+from tests.utils import BaseTestCase, test_engine
 
 
 class LoginTestCase(AioHTTPTestCase, BaseTestCase):
@@ -23,12 +23,10 @@ class LoginTestCase(AioHTTPTestCase, BaseTestCase):
     """
     def setUp(self) -> None:
         super().setUp()
-        storage.database.Base.metadata.create_all(storage.database.engine())
+        storage.database.Base.metadata.create_all(test_engine())
         fake = faker.Faker()
 
-        storage.database.ScopedAppSession.configure(
-            bind=storage.database.engine()
-        )
+        storage.database.ScopedAppSession.configure(bind=test_engine())
 
         self.session = storage.database.ScopedAppSession()  # type: Session
 
@@ -44,13 +42,11 @@ class LoginTestCase(AioHTTPTestCase, BaseTestCase):
         self.session.commit()
 
         storage.database.ScopedAppSession.remove()
-        storage.database.Base.metadata.drop_all(
-            storage.database.engine()
-        )
+        storage.database.Base.metadata.drop_all(test_engine())
 
     async def get_application(self) -> Application:
         from oneweb_helpdesk_chat import app
-        return await app.make_app()
+        return await app.make_app(config.TEST_DB_URL)
 
     @unittest_run_loop
     async def test_login_success(self):

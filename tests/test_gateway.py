@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, Query
 from oneweb_helpdesk_chat.storage.domain import Channel
 from oneweb_helpdesk_chat.storage import database
 from oneweb_helpdesk_chat.gateways import Gateway, Message
-from tests.utils import AsyncMock, BaseTestCase
+from tests.utils import AsyncMock, BaseTestCase, test_engine
 
 
 class TestGateway(Gateway):
@@ -36,10 +36,10 @@ class GatewayTestCase(BaseTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.loop = asyncio.new_event_loop()
-        database.Base.metadata.drop_all(database.engine())
-        database.Base.metadata.create_all(database.engine())
+        database.Base.metadata.drop_all(test_engine())
+        database.Base.metadata.create_all(test_engine())
 
-        database.ScopedAppSession.configure(bind=database.engine())
+        database.ScopedAppSession.configure(bind=test_engine())
 
         self.gateway = TestGateway(
             customer_repository=database.CustomerRepository(),
@@ -51,7 +51,7 @@ class GatewayTestCase(BaseTestCase):
         super().tearDown()
         database.ScopedAppSession.commit()
         database.ScopedAppSession.remove()
-        database.Base.metadata.drop_all(database.engine())
+        database.Base.metadata.drop_all(test_engine())
         self.loop.close()
 
     def test_handle_message_without_dialog(self):

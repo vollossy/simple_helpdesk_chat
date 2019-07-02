@@ -2,6 +2,23 @@ import logging
 from unittest import TestCase
 from unittest.mock import MagicMock
 
+import sqlalchemy
+
+from oneweb_helpdesk_chat import config
+
+
+_engine = None
+
+
+def test_engine():
+    global _engine
+    if _engine is None:
+        # todo: сделать вариацию для получения именно тестовой бд
+        _engine = sqlalchemy.create_engine(
+            config.TEST_DB_URL, echo=False, pool_size=10, max_overflow=0
+        )
+    return _engine
+
 
 class AsyncMock(MagicMock):
     async def __call__(self, *args, **kwargs):

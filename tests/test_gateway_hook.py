@@ -6,7 +6,7 @@ from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
 from aiohttp.web_app import Application
 from unittest.mock import MagicMock
 
-from oneweb_helpdesk_chat import storage
+from oneweb_helpdesk_chat import storage, config
 from oneweb_helpdesk_chat.gateways import repository
 from tests.utils import AsyncMock, BaseTestCase
 
@@ -18,11 +18,13 @@ class GatewayHookTestCase(AioHTTPTestCase, BaseTestCase):
 
     async def get_application(self) -> Application:
         from oneweb_helpdesk_chat import app
-        return await app.make_app()
+        return await app.make_app(config.TEST_DB_URL)
 
     def setUp(self) -> None:
         super().setUp()
-        self.dialog = storage.Dialog(id=1)
+        self.dialog = storage.Dialog(
+            id=1, customer=storage.Customer(name="Анатолий")
+        )
 
         self.gateway_stub = MagicMock()
         self.gateway_stub.handle_message = AsyncMock(

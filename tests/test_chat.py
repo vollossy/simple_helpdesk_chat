@@ -19,7 +19,7 @@ from oneweb_helpdesk_chat.storage.domain import Channel
 from tests import utils
 from oneweb_helpdesk_chat.gateways import Repository
 from tests.utils import BaseTestCase
-from oneweb_helpdesk_chat import app, storage
+from oneweb_helpdesk_chat import app, storage, config
 
 
 class ChatHandlerTestCase(TestCase):
@@ -200,7 +200,7 @@ class ChatEndpointTestCase(AioHTTPTestCase, BaseTestCase):
         self.addCleanup(gateways_patch.stop)
 
     async def get_application(self) -> Application:
-        return await app.make_app()
+        return await app.make_app(config.TEST_DB_URL)
 
     @unittest_run_loop
     async def test_customer_message_received(self):

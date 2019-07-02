@@ -2,11 +2,14 @@ import asyncio
 import logging
 from typing import Optional, Sequence, Mapping, Any
 
+import sqlalchemy
 from aiohttp import web
 from aiohttp.log import web_logger
 from aiohttp.web_app import _Middleware
 from aiohttp.web_urldispatcher import UrlDispatcher
 from aiohttp_session import get_session, setup, SimpleCookieStorage
+from sqlalchemy.engine import Engine
+
 from oneweb_helpdesk_chat import events, gateways, storage, security
 from oneweb_helpdesk_chat.chat import ChatHandler
 from . import events as app_events
@@ -159,10 +162,18 @@ async def chat(request: web.Request):
     return ws
 
 
-async def make_app():
+async def make_app(db_url: str):
     """
     Фабрика для создания приложения
     """
+    engine = sqlalchemy.create_engine(
+        db_url, echo=False, pool_size=10, max_overflow=0
+    )
+    logger.info(
+        "Создается новый экземпляр приложения. Настройки подключения к бд: %s",
+        str(engine)
+    )
+    storage.database.ScopedAppSession.configure(bind=engine)
     app = Application(dialogs_queues=queues.DictRepository())
     setup(app, SimpleCookieStorage())
     app.add_routes(routes)

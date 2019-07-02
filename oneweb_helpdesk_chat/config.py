@@ -6,6 +6,11 @@ import os
 # URL базы данных
 DB_URL = os.environ.get(
     'DB_URL',
+    'postgresql://postgres:simplepass@localhost/oneweb_helpdesk_chat'
+)
+
+TEST_DB_URL = os.environ.get(
+    'TEST_DB_URL',
     'postgresql://postgres:simplepass@localhost/oneweb_helpdesk_chat_test'
 )
 

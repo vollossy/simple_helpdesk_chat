@@ -15,6 +15,8 @@ from . import queues
 
 routes = web.RouteTableDef()
 
+logger = logging.getLogger(__name__)
+
 
 class Application(web.Application):
     """
@@ -54,15 +56,27 @@ async def gateway_hook(request: web.Request):
     :param request: Запрос
     :return:
     """
-    gateway = gateways.repository.get_gateway(
-        request.match_info["gateway_alias"]
-    )
+    gateway_alias = request.match_info["gateway_alias"]
+    logger.info("Новое сообщение от клиента пришло в шлюз %s", gateway_alias)
+    gateway = gateways.repository.get_gateway(gateway_alias)
     # асинхронный вызов, т.к. обработка может быть довольно длительной
     message = await gateway.handle_message(request)
 
     await request.app.dialogs_queues.put(str(message.dialog_id), message)
+    logger.info(
+        "Сообщение от клиента %s отправлено в диалог("
+        "id: %s, назначенный работник: %s)",
+        message.dialog.customer.name,
+        message.dialog.id,
+        message.dialog.assigned_user.login if message.dialog.assigned_user
+        else "Не назначен"
+    )
 
     if not message.dialog.assigned_user:
+        logger.info(
+            "Работник не назначен в диалог, отправляем уведомление всем "
+            "работникам"
+        )
         await app_events.events_queue.put(app_events.Event(
             app_events.EventType.NEW_UNASSIGNED_DIALOG_MESSAGE,
             message.dialog.id
